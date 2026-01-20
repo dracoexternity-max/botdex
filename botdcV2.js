@@ -173,6 +173,19 @@ const discordProducts = {
         price: '45.000',
         details: 'Nitro Promotion 3 Bulan via Log\n• Bisa untuk semua user / new user\n• Diclaimkan oleh admin\n• Terima beres'
     },
+
+        server_boost: {
+        name: 'Server Boost 3 bulan (2x boost)',
+        price: '30.000',
+        details: 'Server Boost 3 Bulan (2x boost) kelipatan 2\n\nBenefit:\n• 2x Server Boost\n• 15% lebih banyak XP\n• 15% lebih banyak emoji\n• 15% lebih banyak file upload\n• 15% lebih banyak voice channel\n• 15% lebih banyak text channel'
+    },
+
+            akun_discord: {
+        name: 'Akun discord umur 1 bulan',
+        price: '15.000',
+        details: 'Akun discord umur 1 bulan\n\n akun polosan discord tanpa nitro\n\nBenefit:\n• Akun fresh umur 1 bulan\n• Bisa di upgrade nitro\n• Bisa di pakai joki / boost server '
+    },
+
     joki_quest: {
         name: 'Joki Quest Discord (Orbs)',
         price: '10.000',
@@ -459,7 +472,7 @@ const ticketConfig = {
   prefix: '!',
   ticketCategory: '── 「 ✦ ! ORDER  ! ✦ 」──',
   adminRole: 'KING',
-  logChannel: '┊・✨﹕ticket﹒logs',
+  logChannel: '┊・🚏﹕ticket﹒logs',
   supportRoles: ['Support', 'Moderator'],
 };
 
@@ -786,6 +799,17 @@ function createDiscordDropdown() {
                 value: 'nitro_promo_via_log'
             },
             {
+                label: 'Server Boost 3 bulan (2x boost)',
+                description: `Rp 30.000`,
+                value: 'server_boost'
+            },
+
+           {
+                label: 'Akun discord umur 1 bulan',
+                description: `Rp 15.000`,
+                value: 'akun_discord'
+            },
+           {
                 label: 'Joki Quest Discord',
                 description: `Rp 10.000`,
                 value: 'joki_quest'
@@ -978,6 +1002,8 @@ function createDiscordCatalogEmbed() {
         .addFields(
             { name: 'Nitro Promo 3M - Via Link', value: `Rp 25.000`, inline: true },
             { name: 'Nitro Promo 3M - Via Log', value: `Rp 45.000`, inline: true },
+            { name: 'Server Boost 3 bulan (2x boost)', value: `Rp 30.000`, inline: true },
+            { name: 'Akun discord umur 1 bulan', value: `Rp 15.000`, inline: true },
             { name: 'Joki Quest Discord', value: `Rp 10.000`, inline: true },
             { name: 'Layanan Lainnya', value: 'DM Admin untuk custom request', inline: false }
         )
