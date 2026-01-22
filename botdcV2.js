@@ -1,7 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, PermissionFlagsBits, Collection, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
 
 // ============================================
 // EXPRESS SERVER UNTUK RENDER PORT BINDING
@@ -21,13 +19,8 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
-    service: 'Discord Multi-Bot System',
-    bots: ['Shop Catalog Bot', 'Ticket System Bot', 'Economy Game Bot'],
-    endpoints: [
-      '/health',
-      '/status',
-      '/uptime'
-    ],
+    service: 'Discord Shop & Ticket System',
+    version: '3.0.0',
     timestamp: new Date().toISOString()
   });
 });
@@ -89,7 +82,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 });
 
 // ============================================
-// DISCORD BOT CODE - MULTI-SYSTEM
+// DISCORD BOT CODE - OPTIMIZED
 // ============================================
 
 const client = new Client({
@@ -105,10 +98,130 @@ const client = new Client({
 global.client = client;
 
 // ============================================
+// ADVANCED RATE LIMIT SYSTEM
+// ============================================
+
+class RateLimiter {
+    constructor() {
+        this.commands = new Collection();
+        this.interactions = new Collection();
+        this.messages = new Collection();
+        
+        // Settings yang lebih longgar untuk mencegah rate limit
+        this.settings = {
+            command: 2000,      // 2 detik antar command
+            interaction: 1000,  // 1 detik antar interaksi
+            message: 500,       // 0.5 detik antar pesan
+            cleanupInterval: 300000 // Cleanup setiap 5 menit
+        };
+        
+        // Start cleanup interval
+        setInterval(() => this.cleanup(), this.settings.cleanupInterval);
+    }
+    
+    // Cek rate limit untuk command
+    checkCommand(userId, commandName) {
+        const key = `${userId}_${commandName}`;
+        const now = Date.now();
+        const lastTime = this.commands.get(key);
+        
+        if (lastTime && now - lastTime < this.settings.command) {
+            return {
+                limited: true,
+                waitTime: Math.ceil((this.settings.command - (now - lastTime)) / 1000)
+            };
+        }
+        
+        this.commands.set(key, now);
+        return { limited: false };
+    }
+    
+    // Cek rate limit untuk interaksi (dropdown, button, modal)
+    checkInteraction(userId, interactionId) {
+        const key = `${userId}_${interactionId}`;
+        const now = Date.now();
+        const lastTime = this.interactions.get(key);
+        
+        // Interaksi UI lebih longgar
+        if (lastTime && now - lastTime < this.settings.interaction) {
+            return {
+                limited: true,
+                waitTime: Math.ceil((this.settings.interaction - (now - lastTime)) / 1000)
+            };
+        }
+        
+        this.interactions.set(key, now);
+        return { limited: false };
+    }
+    
+    // Cek rate limit untuk pesan reguler
+    checkMessage(userId) {
+        const now = Date.now();
+        const lastTime = this.messages.get(userId);
+        
+        if (lastTime && now - lastTime < this.settings.message) {
+            return {
+                limited: true,
+                waitTime: Math.ceil((this.settings.message - (now - lastTime)) / 1000)
+            };
+        }
+        
+        this.messages.set(userId, now);
+        return { limited: false };
+    }
+    
+    // Reset rate limit untuk user tertentu
+    resetUser(userId) {
+        for (const [key] of this.commands.entries()) {
+            if (key.startsWith(`${userId}_`)) {
+                this.commands.delete(key);
+            }
+        }
+        
+        for (const [key] of this.interactions.entries()) {
+            if (key.startsWith(`${userId}_`)) {
+                this.interactions.delete(key);
+            }
+        }
+        
+        this.messages.delete(userId);
+    }
+    
+    // Cleanup data lama
+    cleanup() {
+        const now = Date.now();
+        
+        // Cleanup commands older than 5 minutes
+        for (const [key, timestamp] of this.commands.entries()) {
+            if (now - timestamp > 300000) {
+                this.commands.delete(key);
+            }
+        }
+        
+        // Cleanup interactions older than 5 minutes
+        for (const [key, timestamp] of this.interactions.entries()) {
+            if (now - timestamp > 300000) {
+                this.interactions.delete(key);
+            }
+        }
+        
+        // Cleanup messages older than 5 minutes
+        for (const [key, timestamp] of this.messages.entries()) {
+            if (now - timestamp > 300000) {
+                this.messages.delete(key);
+            }
+        }
+    }
+}
+
+// Inisialisasi rate limiter
+const rateLimiter = new RateLimiter();
+
+// ============================================
 // 1. SISTEM SHOP CATALOG
 // ============================================
 
-// Konfigurasi produk (diupdate sesuai foto)
+// Konfigurasi produk
 const products = {
     vidio: {
         name: 'Vidio',
@@ -173,19 +286,16 @@ const discordProducts = {
         price: '45.000',
         details: 'Nitro Promotion 3 Bulan via Log\n• Bisa untuk semua user / new user\n• Diclaimkan oleh admin\n• Terima beres'
     },
-
-        server_boost: {
+    server_boost: {
         name: 'Server Boost 3 bulan (2x boost)',
         price: '30.000',
         details: 'Server Boost 3 Bulan (2x boost) kelipatan 2\n\nBenefit:\n• 2x Server Boost\n• 15% lebih banyak XP\n• 15% lebih banyak emoji\n• 15% lebih banyak file upload\n• 15% lebih banyak voice channel\n• 15% lebih banyak text channel'
     },
-
-            akun_discord: {
+    akun_discord: {
         name: 'Akun discord umur 1 bulan',
         price: '15.000',
-        details: 'Akun discord umur 1 bulan\n\n akun polosan discord tanpa nitro\n\nBenefit:\n• Akun fresh umur 1 bulan\n• Bisa di upgrade nitro\n• Bisa di pakai joki / boost server '
+        details: 'Akun discord umur 1 bulan\n\n akun polosan discord tanpa nitro\n\nBenefit:\n• Akun fresh umur 1 bulan\n• Bisa di upgrade nitro\n• Bisa di pakai joki / boost server'
     },
-
     joki_quest: {
         name: 'Joki Quest Discord (Orbs)',
         price: '10.000',
@@ -281,178 +391,8 @@ const gameProducts = {
         platform: 'Steam SHARING',
         genre: 'Action RPG, Cyberpunk',
         details: 'CYBERPUNK 2077\n\n• Phantom Liberty DLC Included\n• All Updates\n• Family Sharing\n• 24/7 Support'
-    },
-    it_takes_two: {
-        name: 'It Takes Two',
-        price: 'Rp 25.000',
-        platform: 'Steam SHARING',
-        genre: 'Adventure, Co-op',
-        details: 'IT TAKES TWO\n\n• Perfect for Couples/Friends\n• Online Co-op\n• Lifetime Access\n• Instant Delivery'
-    },
-    f1_25: {
-        name: 'F1 2025',
-        price: 'Rp 35.000',
-        platform: 'Steam SHARING',
-        genre: 'Racing, Simulation',
-        details: 'F1 2025\n\n• Latest Season\n• All Tracks & Teams\n• Multiplayer Ready\n• Family Sharing'
-    },
-    stray: {
-        name: 'Stray',
-        price: 'Rp 25.000',
-        platform: 'Steam SHARING',
-        genre: 'Adventure, Indie',
-        details: 'STRAY\n\n• Cat Adventure Game\n• Beautiful Graphics\n• Lifetime Access\n• No Waiting'
-    },
-    nba_2025: {
-        name: 'NBA 2025',
-        price: 'Rp 35.000',
-        platform: 'Steam SHARING',
-        genre: 'Sports, Basketball',
-        details: 'NBA 2025\n\n• Latest Roster\n• Online Multiplayer\n• Family Sharing\n• Instant Access'
-    },
-    nba_2026: {
-        name: 'NBA 2026',
-        price: 'Rp 35.000',
-        platform: 'Steam SHARING',
-        genre: 'Sports, Basketball',
-        details: 'NBA 2026\n\n• Most Recent Edition\n• All Teams Updated\n• Lifetime Access\n• No Queue'
-    },
-    red_dead_2: {
-        name: 'Red Dead Redemption 2',
-        price: 'Rp 35.000',
-        platform: 'Steam SHARING',
-        genre: 'Action-Adventure, Western',
-        details: 'RED DEAD REDEMPTION 2\n\n• Story Mode Only\n• Lifetime Access\n• Family Sharing\n• 24/7 Support'
-    },
-    five_hearts: {
-        name: 'Five Hearts Under One Roof',
-        price: 'Rp 30.000',
-        platform: 'Steam SHARING',
-        genre: 'Simulation, Dating',
-        details: 'FIVE HEARTS UNDER ONE ROOF\n\n• Visual Novel\n• Multiple Endings\n• Lifetime Update\n• No Waiting'
-    },
-    resident_evil_4: {
-        name: 'Resident Evil 4 Gold Edition',
-        price: 'Rp 30.000',
-        platform: 'Steam SHARING',
-        genre: 'Survival Horror',
-        details: 'RESIDENT EVIL 4 GOLD EDITION\n\n• Full Game + All DLC\n• Remastered Edition\n• Family Sharing\n• Instant Access'
-    },
-    inzoi: {
-        name: 'InZOI',
-        price: 'Rp 35.000',
-        platform: 'Steam SHARING',
-        genre: 'Life Simulation',
-        details: 'INZOI\n\n• Latest Life Simulator\n• Complete Edition\n• Lifetime Access\n• Family Sharing\n• Instant Delivery'
     }
 };
-
-// === SISTEM COOLDOWN YANG DIPERBAIKI ===
-class CommandCooldown {
-    constructor() {
-        this.cooldowns = new Collection();
-        this.cooldownTime = 3000; // 3 detik untuk command
-        this.ignoredInteractions = ['select_product', 'select_discord', 'select_server', 'select_decoration', 'select_game', 'back_', 'create_ticket', 'close_ticket', 'confirm_close', 'cancel_close'];
-        
-        setInterval(() => this.cleanup(), 60000); // Cleanup setiap 1 menit
-    }
-    
-    // HANYA cek cooldown untuk command dengan prefix '!'
-    checkCommand(message) {
-        const content = message.content.toLowerCase();
-        
-        // Hanya proses jika dimulai dengan '!' dan bukan dari bot
-        if (!content.startsWith('!') || message.author.bot) {
-            return { shouldProcess: true, isCommand: false };
-        }
-        
-        const userId = message.author.id;
-        const command = content.split(' ')[0]; // Ambil command pertama
-        
-        // Valid commands yang diketahui untuk SHOP
-        const validCommands = ['!catalog', '!catalogdc', '!catalogsv', '!catalogdeco', '!cataloggame'];
-        
-        // Jika bukan command yang valid, skip cooldown
-        if (!validCommands.includes(command)) {
-            return { shouldProcess: true, isCommand: false };
-        }
-        
-        const key = `${userId}_${command}`;
-        const now = Date.now();
-        
-        // Cek jika user ada dalam cooldown
-        if (this.cooldowns.has(key)) {
-            const expirationTime = this.cooldowns.get(key) + this.cooldownTime;
-            
-            if (now < expirationTime) {
-                const waitTime = Math.ceil((expirationTime - now) / 1000);
-                return {
-                    shouldProcess: false,
-                    isCommand: true,
-                    waitTime: waitTime,
-                    command: command
-                };
-            }
-        }
-        
-        // Set cooldown baru
-        this.cooldowns.set(key, now);
-        return { shouldProcess: true, isCommand: true };
-    }
-    
-    // Interaksi UI TIDAK dikenakan cooldown
-    checkInteraction(interaction) {
-        const interactionId = interaction.customId;
-        
-        // Skip cooldown untuk interaksi UI (dropdown, button)
-        for (const ignoredId of this.ignoredInteractions) {
-            if (interactionId.startsWith(ignoredId)) {
-                return { limited: false };
-            }
-        }
-        
-        // Untuk interaksi lain, gunakan cooldown ringan
-        const userId = interaction.user.id;
-        const key = `${userId}_interaction`;
-        const now = Date.now();
-        
-        if (this.cooldowns.has(key)) {
-            const expirationTime = this.cooldowns.get(key) + 2000; // 2 detik
-            
-            if (now < expirationTime) {
-                const waitTime = Math.ceil((expirationTime - now) / 1000);
-                return {
-                    limited: true,
-                    waitTime: waitTime
-                };
-            }
-        }
-        
-        this.cooldowns.set(key, now);
-        return { limited: false };
-    }
-    
-    cleanup() {
-        const now = Date.now();
-        
-        for (const [key, timestamp] of this.cooldowns.entries()) {
-            if (now - timestamp > 300000) { // Hapus data lebih dari 5 menit
-                this.cooldowns.delete(key);
-            }
-        }
-    }
-    
-    resetUser(userId) {
-        for (const [key] of this.cooldowns.entries()) {
-            if (key.startsWith(`${userId}_`)) {
-                this.cooldowns.delete(key);
-            }
-        }
-    }
-}
-
-// Inisialisasi cooldown manager untuk SHOP
-const cooldownManager = new CommandCooldown();
 
 // Konfigurasi channel SHOP
 const ORDER_CHANNEL_ID = '1452593411734376490';
@@ -465,7 +405,7 @@ const THUMBNAIL_IMAGE = 'https://image2url.com/r2/bucket1/images/1767693842203-a
 const GAME_BANNER = 'https://image2url.com/r2/bucket1/gifs/1767794908164-5e4f7d1e-45f4-445d-8508-d73e8d9da4bd.gif';
 
 // ============================================
-// 2. SISTEM TICKET
+// 2. SISTEM TICKET (OPTIMIZED)
 // ============================================
 
 const ticketConfig = {
@@ -484,14 +424,14 @@ const colors = {
   info: 0x3498DB
 };
 
-// Cache in-memory untuk ticket
+// Optimized cache untuk ticket
 const ticketCache = {
   activeTickets: new Collection(),
   ticketCounter: new Collection(),
 };
 
 // Rate limiting untuk ticket
-const rateLimits = new Collection();
+const ticketRateLimits = new Collection();
 const TICKET_RATE_LIMIT = {
   createTicket: 30000,
   closeTicket: 10000,
@@ -508,16 +448,14 @@ const embedImages = {
 function isRateLimited(userId, action) {
   const key = `${userId}:${action}`;
   const now = Date.now();
-  const userLimit = rateLimits.get(key);
+  const userLimit = ticketRateLimits.get(key);
   
-  if (userLimit) {
-    if (now - userLimit < TICKET_RATE_LIMIT[action]) {
-      return true;
-    }
+  if (userLimit && now - userLimit < TICKET_RATE_LIMIT[action]) {
+    return true;
   }
   
-  rateLimits.set(key, now);
-  setTimeout(() => rateLimits.delete(key), TICKET_RATE_LIMIT[action]);
+  ticketRateLimits.set(key, now);
+  setTimeout(() => ticketRateLimits.delete(key), TICKET_RATE_LIMIT[action]);
   return false;
 }
 
@@ -548,188 +486,16 @@ function isAdmin(member) {
 async function sendTempMessage(channel, content, duration = 5000) {
   try {
     const msg = await channel.send(content);
-    setTimeout(() => msg.delete().catch(() => {}), duration);
+    setTimeout(() => {
+      if (msg.deletable) {
+        msg.delete().catch(() => {});
+      }
+    }, duration);
     return msg;
   } catch (error) {
     console.error('Error sending temp message:', error);
     return null;
   }
-}
-
-// ============================================
-// 3. SISTEM EKONOMI (SIMULASI PYTHON BOT)
-// ============================================
-
-// File paths untuk ekonomi data
-const ECONOMY_FILE = "economy_data.json";
-const GACHA_FILE = "gacha_data.json";
-const INVENTORY_FILE = "inventory_data.json";
-
-// In-memory economy data
-let economyData = {};
-let gachaData = {};
-let inventoryData = {};
-
-// Load economy data dari file
-function loadEconomyData() {
-    try {
-        if (fs.existsSync(ECONOMY_FILE)) {
-            const data = fs.readFileSync(ECONOMY_FILE, 'utf8');
-            economyData = JSON.parse(data);
-        } else {
-            economyData = {};
-        }
-    } catch (error) {
-        console.error('Error loading economy data:', error);
-        economyData = {};
-    }
-    
-    try {
-        if (fs.existsSync(GACHA_FILE)) {
-            const data = fs.readFileSync(GACHA_FILE, 'utf8');
-            gachaData = JSON.parse(data);
-        } else {
-            gachaData = {};
-        }
-    } catch (error) {
-        console.error('Error loading gacha data:', error);
-        gachaData = {};
-    }
-    
-    try {
-        if (fs.existsSync(INVENTORY_FILE)) {
-            const data = fs.readFileSync(INVENTORY_FILE, 'utf8');
-            inventoryData = JSON.parse(data);
-        } else {
-            inventoryData = {};
-        }
-    } catch (error) {
-        console.error('Error loading inventory data:', error);
-        inventoryData = {};
-    }
-}
-
-// Save economy data ke file
-function saveEconomyData() {
-    try {
-        fs.writeFileSync(ECONOMY_FILE, JSON.stringify(economyData, null, 4));
-        fs.writeFileSync(GACHA_FILE, JSON.stringify(gachaData, null, 4));
-        fs.writeFileSync(INVENTORY_FILE, JSON.stringify(inventoryData, null, 4));
-    } catch (error) {
-        console.error('Error saving economy data:', error);
-    }
-}
-
-// Economy system functions
-function getEconomyUserData(userId) {
-    const userIdStr = userId.toString();
-    if (!economyData[userIdStr]) {
-        economyData[userIdStr] = {
-            balance: 1000,
-            bank: 0,
-            xp: 0,
-            level: 1,
-            total_earned: 0,
-            total_spent: 0,
-            daily_streak: 0,
-            last_daily: null,
-            achievements: [],
-            transactions: [],
-            last_collect: null
-        };
-    }
-    return economyData[userIdStr];
-}
-
-function addMoney(userId, amount, reason = "Tidak diketahui") {
-    const userData = getEconomyUserData(userId);
-    userData.balance += amount;
-    userData.total_earned += amount;
-    
-    const transaction = {
-        type: "income",
-        amount: amount,
-        reason: reason,
-        timestamp: new Date().toISOString()
-    };
-    userData.transactions.push(transaction);
-    
-    saveEconomyData();
-    return userData.balance;
-}
-
-function removeMoney(userId, amount, reason = "Tidak diketahui") {
-    const userData = getEconomyUserData(userId);
-    if (userData.balance < amount) {
-        return false;
-    }
-    
-    userData.balance -= amount;
-    userData.total_spent += amount;
-    
-    const transaction = {
-        type: "expense",
-        amount: amount,
-        reason: reason,
-        timestamp: new Date().toISOString()
-    };
-    userData.transactions.push(transaction);
-    
-    saveEconomyData();
-    return true;
-}
-
-function transferMoney(fromId, toId, amount) {
-    const fromUser = getEconomyUserData(fromId);
-    const toUser = getEconomyUserData(toId);
-    
-    if (fromUser.balance < amount) {
-        return { success: false, message: "Saldo tidak cukup" };
-    }
-    
-    fromUser.balance -= amount;
-    toUser.balance += amount;
-    
-    const transactionOut = {
-        type: "transfer_out",
-        amount: amount,
-        to: toId.toString(),
-        timestamp: new Date().toISOString()
-    };
-    fromUser.transactions.push(transactionOut);
-    
-    const transactionIn = {
-        type: "transfer_in",
-        amount: amount,
-        from: fromId.toString(),
-        timestamp: new Date().toISOString()
-    };
-    toUser.transactions.push(transactionIn);
-    
-    saveEconomyData();
-    return { success: true, message: "Transfer berhasil" };
-}
-
-function addXP(userId, xpAmount) {
-    const userData = getEconomyUserData(userId);
-    userData.xp += xpAmount;
-    
-    let levelUps = 0;
-    let requiredXP = userData.level * 100;
-    
-    while (userData.xp >= requiredXP) {
-        userData.xp -= requiredXP;
-        userData.level += 1;
-        levelUps += 1;
-        requiredXP = userData.level * 100;
-        
-        const bonus = userData.level * 100;
-        userData.balance += bonus;
-        userData.total_earned += bonus;
-    }
-    
-    saveEconomyData();
-    return levelUps;
 }
 
 // ============================================
@@ -803,13 +569,12 @@ function createDiscordDropdown() {
                 description: `Rp 30.000`,
                 value: 'server_boost'
             },
-
-           {
+            {
                 label: 'Akun discord umur 1 bulan',
                 description: `Rp 15.000`,
                 value: 'akun_discord'
             },
-           {
+            {
                 label: 'Joki Quest Discord',
                 description: `Rp 10.000`,
                 value: 'joki_quest'
@@ -911,41 +676,6 @@ function createGameDropdown() {
                 label: 'Cyberpunk 2077',
                 description: 'Rp 30.000',
                 value: 'cyberpunk'
-            },
-            {
-                label: 'It Takes Two',
-                description: 'Rp 25.000',
-                value: 'it_takes_two'
-            },
-            {
-                label: 'F1 2025',
-                description: 'Rp 35.000',
-                value: 'f1_25'
-            },
-            {
-                label: 'Stray',
-                description: 'Rp 25.000',
-                value: 'stray'
-            },
-            {
-                label: 'Red Dead Redemption 2',
-                description: 'Rp 35.000',
-                value: 'red_dead_2'
-            },
-            {
-                label: 'Five Hearts Under One Roof',
-                description: 'Rp 30.000',
-                value: 'five_hearts'
-            },
-            {
-                label: 'Resident Evil 4 Gold',
-                description: 'Rp 30.000',
-                value: 'resident_evil_4'
-            },
-            {
-                label: 'InZOI',
-                description: 'Rp 35.000',
-                value: 'inzoi'
             }
         );
 
@@ -1072,18 +802,7 @@ function createGameCatalogEmbed() {
             { name: 'FC 25', value: 'Rp 37.000', inline: true },
             { name: 'FC 26', value: 'Rp 74.000', inline: true },
             { name: 'Silent Hill', value: 'Rp 30.000', inline: true },
-            { name: 'Cyberpunk 2077', value: 'Rp 30.000', inline: true },
-            { name: 'It Takes Two', value: 'Rp 25.000', inline: true },
-            { name: 'F1 2025', value: 'Rp 35.000', inline: true },
-            { name: 'Stray', value: 'Rp 25.000', inline: true },
-            { name: 'NBA 2025', value: 'Rp 35.000', inline: true },
-            { name: 'NBA 2026', value: 'Rp 60.000', inline: true },
-            { name: 'Red Dead Redemption 2', value: 'Rp 35.000', inline: true }
-        )
-        .addFields(
-            { name: 'Five Hearts Under One Roof', value: 'Rp 30.000', inline: true },
-            { name: 'Resident Evil 4 Gold Edition', value: 'Rp 30.000', inline: true },
-            { name: 'InZOI', value: 'Rp 35.000', inline: true }
+            { name: 'Cyberpunk 2077', value: 'Rp 30.000', inline: true }
         )
         .addFields(
             { 
@@ -1091,7 +810,6 @@ function createGameCatalogEmbed() {
                 value: '**NYARI GAMES YANG GA ADA DI CATALOG ? LANGSUNG CHAT ADMIN AJA ! READY ALL GAME**\n\nKami menyediakan hampir semua game di Steam! Cukup tanya admin untuk game yang kamu cari.', 
                 inline: false 
             },
-            { name: 'TOTAL GAME TERSEDIA', value: '15+ Game Terbaru (dan masih banyak lagi!)', inline: false },
             { name: 'KEUNGGULAN', value: '• Steam Sharing\n• Lifetime Access\n• Bebas Antrian\n• Support 24/7\n• **READY ALL GAME - TANYA ADMIN!**', inline: false },
             { name: 'CARA ORDER', value: `Kunjungi ${ORDER_CHANNEL_MENTION} dan ketik: \`!order [nama game]\`\n**ATAU langsung chat admin untuk game yang tidak ada di catalog!**`, inline: false }
         )
@@ -1110,16 +828,12 @@ client.once('ready', () => {
   console.log('='.repeat(50));
   console.log(`🤖 Bot ${client.user.tag} logged in successfully!`);
   console.log(`🏠 Servers: ${client.guilds.cache.size}`);
-  console.log(`📊 Sistem Shop: Ready!`);
-  console.log(`🎫 Sistem Ticket: Ready!`);
-  console.log(`💰 Sistem Ekonomi: Ready!`);
+  console.log(`📊 Sistem Shop: Ready! (Optimized)`);
+  console.log(`🎫 Sistem Ticket: Ready! (Optimized)`);
+  console.log(`⚡ Rate Limiting: Active`);
   console.log('='.repeat(50));
   
-  client.user.setActivity('Multi-System Bot | !help', { type: 'WATCHING' });
-  
-  // Load economy data
-  loadEconomyData();
-  console.log(`💰 Economy data loaded: ${Object.keys(economyData).length} users`);
+  client.user.setActivity('Shop & Ticket System | !help', { type: 'WATCHING' });
   
   // Initialize ticket counter based on existing channels
   client.guilds.cache.forEach(guild => {
@@ -1162,98 +876,80 @@ client.once('ready', () => {
 });
 
 // ============================================
-// SHOP CATALOG COMMANDS
+// MESSAGE HANDLER (OPTIMIZED)
 // ============================================
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     
-    // SHOP CATALOG COOLDOWN CHECK
-    const cooldownCheck = cooldownManager.checkCommand(message);
+    // Rate limiting untuk pesan reguler
+    const messageLimit = rateLimiter.checkMessage(message.author.id);
+    if (messageLimit.limited) {
+        return; // Silent fail untuk pesan reguler
+    }
     
-    if (!cooldownCheck.shouldProcess && cooldownCheck.isCommand) {
-        try {
-            const warning = await message.reply({
-                content: `Mohon tunggu **${cooldownCheck.waitTime} detik** sebelum menggunakan command \`${cooldownCheck.command}\` lagi.`,
-                ephemeral: true
-            });
-            
-            setTimeout(() => {
-                warning.delete().catch(() => {});
-            }, 3000);
-        } catch (error) {
-            // Silent fail
+    // SHOP CATALOG COMMANDS
+    if (message.content === '!catalog' || 
+        message.content === '!catalogdc' || 
+        message.content === '!catalogsv' || 
+        message.content === '!catalogdeco' || 
+        message.content === '!cataloggame') {
+        
+        // Cek permissions (hanya admin)
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return sendTempMessage(message.channel, '❌ Hanya admin yang bisa menggunakan command ini!', 5000);
         }
+        
+        // Rate limiting untuk command catalog
+        const commandLimit = rateLimiter.checkCommand(message.author.id, 'catalog');
+        if (commandLimit.limited) {
+            return sendTempMessage(message.channel, `⏳ Mohon tunggu ${commandLimit.waitTime} detik sebelum menggunakan command ini lagi.`, 3000);
+        }
+        
+        let embed, dropdownRow;
+        
+        switch(message.content) {
+            case '!catalog':
+                embed = createStreamingCatalogEmbed();
+                dropdownRow = createProductDropdown();
+                break;
+            case '!catalogdc':
+                embed = createDiscordCatalogEmbed();
+                dropdownRow = createDiscordDropdown();
+                break;
+            case '!catalogsv':
+                embed = createServerCatalogEmbed();
+                dropdownRow = createServerDropdown();
+                break;
+            case '!catalogdeco':
+                embed = createDecorationCatalogEmbed();
+                dropdownRow = createDecorationDropdown();
+                break;
+            case '!cataloggame':
+                embed = createGameCatalogEmbed();
+                dropdownRow = createGameDropdown();
+                break;
+        }
+        
+        try {
+            await message.channel.send({ embeds: [embed], components: [dropdownRow] });
+        } catch (error) {
+            console.error('Error sending catalog:', error);
+        }
+        
         return;
     }
     
-    // Command untuk menampilkan catalog streaming utama
-    if (message.content === '!catalog') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('Hanya admin yang bisa menggunakan command ini!');
-        }
-
-        const embed = createStreamingCatalogEmbed();
-        const dropdownRow = createProductDropdown();
-
-        await message.channel.send({ embeds: [embed], components: [dropdownRow] });
-    }
-
-    // Command untuk menampilkan catalog Discord Nitro & Joki
-    if (message.content === '!catalogdc') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('Hanya admin yang bisa menggunakan command ini!');
-        }
-
-        const embed = createDiscordCatalogEmbed();
-        const dropdownRow = createDiscordDropdown();
-
-        await message.channel.send({ embeds: [embed], components: [dropdownRow] });
-    }
-
-    // Command untuk menampilkan catalog Server Setup & Bot Custom
-    if (message.content === '!catalogsv') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('Hanya admin yang bisa menggunakan command ini!');
-        }
-
-        const embed = createServerCatalogEmbed();
-        const dropdownRow = createServerDropdown();
-
-        await message.channel.send({ embeds: [embed], components: [dropdownRow] });
-    }
-
-    // Command untuk menampilkan catalog Decoration
-    if (message.content === '!catalogdeco') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('Hanya admin yang bisa menggunakan command ini!');
-        }
-
-        const embed = createDecorationCatalogEmbed();
-        const dropdownRow = createDecorationDropdown();
-
-        await message.channel.send({ embeds: [embed], components: [dropdownRow] });
-    }
-
-    // Command untuk menampilkan catalog Game Steam
-    if (message.content === '!cataloggame') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('Hanya admin yang bisa menggunakan command ini!');
-        }
-
-        const embed = createGameCatalogEmbed();
-        const dropdownRow = createGameDropdown();
-
-        await message.channel.send({ embeds: [embed], components: [dropdownRow] });
-    }
-    
-    // ============================================
     // TICKET SYSTEM COMMANDS
-    // ============================================
-    
     if (message.content.startsWith(ticketConfig.prefix)) {
         const args = message.content.slice(ticketConfig.prefix.length).trim().split(/ +/);
         const command = args.shift().toLowerCase();
+        
+        // Rate limiting untuk command ticket
+        const ticketCommandLimit = rateLimiter.checkCommand(message.author.id, `ticket_${command}`);
+        if (ticketCommandLimit.limited && command !== 'help' && command !== 'ping') {
+            return sendTempMessage(message.channel, `⏳ Mohon tunggu ${ticketCommandLimit.waitTime} detik sebelum menggunakan command ini lagi.`, 3000);
+        }
         
         try {
             switch (command) {
@@ -1279,7 +975,8 @@ client.on('messageCreate', async (message) => {
                     await showHelp(message);
                     break;
                 case 'ping':
-                    await message.reply('Pong! 🏓');
+                    const latency = Math.round(client.ws.ping);
+                    await message.reply(`🏓 Pong! ${latency}ms`);
                     break;
                 case 'logs':
                     await showTicketLogs(message);
@@ -1290,95 +987,13 @@ client.on('messageCreate', async (message) => {
             }
         } catch (error) {
             console.error(`Error executing command ${command}:`, error);
-            await sendTempMessage(message.channel, 'Error executing command!', 5000);
-        }
-    }
-    
-    // ============================================
-    // ECONOMY SYSTEM COMMANDS (dengan prefix ".")
-    // ============================================
-    
-    if (message.content.startsWith('.')) {
-        const args = message.content.slice(1).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
-        
-        try {
-            switch (command) {
-                case 'balance':
-                case 'bal':
-                case 'uang':
-                case 'saldo':
-                    const member = message.mentions.members.first() || message.member;
-                    await checkBalance(message, member);
-                    break;
-                    
-                case 'daily':
-                    await dailyReward(message);
-                    break;
-                    
-                case 'work':
-                case 'kerja':
-                    await workCommand(message);
-                    break;
-                    
-                case 'crime':
-                case 'kejahatan':
-                    await crimeCommand(message);
-                    break;
-                    
-                case 'transfer':
-                case 'tf':
-                case 'kirim':
-                    const target = message.mentions.members.first();
-                    const amount = parseInt(args[1]);
-                    if (target && amount) {
-                        await transferMoneyCommand(message, target, amount);
-                    } else {
-                        await message.reply('❌ Format: `.transfer @user jumlah`');
-                    }
-                    break;
-                    
-                case 'rich':
-                case 'top':
-                case 'leaderboard':
-                    await richLeaderboard(message);
-                    break;
-                    
-                case 'pricelist':
-                    await pricelistCommand(message);
-                    break;
-                    
-                case 'payment':
-                    const invoiceId = args[0];
-                    await showPayment(message, invoiceId);
-                    break;
-                    
-                case 'payimage':
-                    await sendPaymentImage(message);
-                    break;
-                    
-                case 'done':
-                    await doneCommand(message);
-                    break;
-                    
-                case 'help':
-                    await botHelp(message);
-                    break;
-                    
-                case 'ping':
-                    const latency = Math.round(client.ws.ping);
-                    await message.reply(`🏓 Pong! ${latency}ms`);
-                    break;
-            }
-        } catch (error) {
-            console.error(`Error executing economy command ${command}:`, error);
-            await message.reply('❌ Terjadi error. Silakan coba lagi.');
+            await sendTempMessage(message.channel, '❌ Error executing command!', 5000);
         }
     }
 });
 
 // ============================================
-// INTERACTION HANDLING
+// INTERACTION HANDLER (OPTIMIZED)
 // ============================================
 
 client.on('interactionCreate', async (interaction) => {
@@ -1396,13 +1011,12 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 async function handleShopSelectMenu(interaction) {
-    // INTERAKSI UI (DROPDOWN, BUTTON) TIDAK DIKENAKAN COOLDOWN KETAT
-    const cooldownCheck = cooldownManager.checkInteraction(interaction);
-    
-    if (cooldownCheck.limited) {
+    // Rate limiting untuk interaksi dropdown
+    const interactionLimit = rateLimiter.checkInteraction(interaction.user.id, interaction.customId);
+    if (interactionLimit.limited) {
         try {
             await interaction.reply({
-                content: `Mohon tunggu ${cooldownCheck.waitTime} detik sebelum interaksi lagi.`,
+                content: `⏳ Mohon tunggu ${interactionLimit.waitTime} detik sebelum berinteraksi lagi.`,
                 ephemeral: true
             });
         } catch (error) {
@@ -1573,142 +1187,59 @@ async function handleShopSelectMenu(interaction) {
 }
 
 async function handleBackButton(interaction) {
+    // Rate limiting untuk tombol kembali
+    const interactionLimit = rateLimiter.checkInteraction(interaction.user.id, 'back_button');
+    if (interactionLimit.limited) {
+        try {
+            await interaction.reply({
+                content: `⏳ Mohon tunggu ${interactionLimit.waitTime} detik sebelum berinteraksi lagi.`,
+                ephemeral: true
+            });
+        } catch (error) {
+            // Silent fail
+        }
+        return;
+    }
+    
     const category = interaction.customId.replace('back_', '');
     
-    if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ 
-            content: 'Mengembalikan ke catalog...',
-            embeds: [],
-            components: []
-        });
-        
-        // Kirim embed baru berdasarkan kategori
-        switch(category) {
-            case 'streaming':
-                const streamingEmbed = createStreamingCatalogEmbed();
-                const streamingDropdown = createProductDropdown();
-                await interaction.followUp({
-                    embeds: [streamingEmbed],
-                    components: [streamingDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'discord':
-                const discordEmbed = createDiscordCatalogEmbed();
-                const discordDropdown = createDiscordDropdown();
-                await interaction.followUp({
-                    embeds: [discordEmbed],
-                    components: [discordDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'server':
-                const serverEmbed = createServerCatalogEmbed();
-                const serverDropdown = createServerDropdown();
-                await interaction.followUp({
-                    embeds: [serverEmbed],
-                    components: [serverDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'decoration':
-                const decorationEmbed = createDecorationCatalogEmbed();
-                const decorationDropdown = createDecorationDropdown();
-                await interaction.followUp({
-                    embeds: [decorationEmbed],
-                    components: [decorationDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'game':
-                const gameEmbed = createGameCatalogEmbed();
-                const gameDropdown = createGameDropdown();
-                await interaction.followUp({
-                    embeds: [gameEmbed],
-                    components: [gameDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            default:
-                const defaultEmbed = createStreamingCatalogEmbed();
-                const defaultDropdown = createProductDropdown();
-                await interaction.followUp({
-                    embeds: [defaultEmbed],
-                    components: [defaultDropdown],
-                    ephemeral: true
-                });
-        }
-    } else {
-        switch(category) {
-            case 'streaming':
-                const streamingEmbed = createStreamingCatalogEmbed();
-                const streamingDropdown = createProductDropdown();
-                await interaction.reply({
-                    embeds: [streamingEmbed],
-                    components: [streamingDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'discord':
-                const discordEmbed = createDiscordCatalogEmbed();
-                const discordDropdown = createDiscordDropdown();
-                await interaction.reply({
-                    embeds: [discordEmbed],
-                    components: [discordDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'server':
-                const serverEmbed = createServerCatalogEmbed();
-                const serverDropdown = createServerDropdown();
-                await interaction.reply({
-                    embeds: [serverEmbed],
-                    components: [serverDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'decoration':
-                const decorationEmbed = createDecorationCatalogEmbed();
-                const decorationDropdown = createDecorationDropdown();
-                await interaction.reply({
-                    embeds: [decorationEmbed],
-                    components: [decorationDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            case 'game':
-                const gameEmbed = createGameCatalogEmbed();
-                const gameDropdown = createGameDropdown();
-                await interaction.reply({
-                    embeds: [gameEmbed],
-                    components: [gameDropdown],
-                    ephemeral: true
-                });
-                break;
-                
-            default:
-                const defaultEmbed = createStreamingCatalogEmbed();
-                const defaultDropdown = createProductDropdown();
-                await interaction.reply({
-                    embeds: [defaultEmbed],
-                    components: [defaultDropdown],
-                    ephemeral: true
-                });
-        }
+    let embed, dropdown;
+    
+    switch(category) {
+        case 'streaming':
+            embed = createStreamingCatalogEmbed();
+            dropdown = createProductDropdown();
+            break;
+        case 'discord':
+            embed = createDiscordCatalogEmbed();
+            dropdown = createDiscordDropdown();
+            break;
+        case 'server':
+            embed = createServerCatalogEmbed();
+            dropdown = createServerDropdown();
+            break;
+        case 'decoration':
+            embed = createDecorationCatalogEmbed();
+            dropdown = createDecorationDropdown();
+            break;
+        case 'game':
+            embed = createGameCatalogEmbed();
+            dropdown = createGameDropdown();
+            break;
+        default:
+            embed = createStreamingCatalogEmbed();
+            dropdown = createProductDropdown();
     }
+    
+    await interaction.reply({
+        embeds: [embed],
+        components: [dropdown],
+        ephemeral: true
+    });
 }
 
 // ============================================
-// TICKET SYSTEM FUNCTIONS
+// TICKET SYSTEM FUNCTIONS (OPTIMIZED)
 // ============================================
 
 async function handleTicketInteraction(interaction) {
@@ -1722,7 +1253,7 @@ async function handleTicketInteraction(interaction) {
         console.error('Error handling interaction:', error);
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({
-                content: 'Terjadi kesalahan saat memproses permintaan Anda!',
+                content: '❌ Terjadi kesalahan saat memproses permintaan Anda!',
                 ephemeral: true
             }).catch(() => {});
         }
@@ -1730,6 +1261,15 @@ async function handleTicketInteraction(interaction) {
 }
 
 async function handleButtonInteraction(interaction) {
+    // Rate limiting untuk interaksi tombol ticket
+    const interactionLimit = rateLimiter.checkInteraction(interaction.user.id, interaction.customId);
+    if (interactionLimit.limited) {
+        return interaction.reply({
+            content: `⏳ Mohon tunggu ${interactionLimit.waitTime} detik sebelum berinteraksi lagi.`,
+            ephemeral: true
+        });
+    }
+    
     switch (interaction.customId) {
         case 'create_ticket':
             await handleCreateTicket(interaction);
@@ -1758,19 +1298,17 @@ async function handleModalSubmit(interaction) {
 }
 
 async function handleCreateTicket(interaction) {
-    // Rate limiting
     if (isRateLimited(interaction.user.id, 'createTicket')) {
         return interaction.reply({
-            content: 'Harap tunggu 30 detik sebelum membuat tiket baru!',
+            content: '⏳ Harap tunggu 30 detik sebelum membuat tiket baru!',
             ephemeral: true
         });
     }
     
-    // Check if user already has active ticket
     if (ticketCache.activeTickets.has(interaction.user.id)) {
         const ticket = ticketCache.activeTickets.get(interaction.user.id);
         return interaction.reply({
-            content: `Anda sudah memiliki tiket aktif: <#${ticket.channelId}>`,
+            content: `❌ Anda sudah memiliki tiket aktif: <#${ticket.channelId}>`,
             ephemeral: true
         });
     }
@@ -1800,7 +1338,7 @@ async function handleCreateTicketModal(interaction) {
         
         if (reason.length < 3) {
             return interaction.editReply({
-                content: 'Alasan terlalu pendek! Minimal 3 karakter.',
+                content: '❌ Alasan terlalu pendek! Minimal 3 karakter.',
                 ephemeral: true
             });
         }
@@ -1909,14 +1447,14 @@ async function handleCreateTicketModal(interaction) {
         });
         
         await interaction.editReply({
-            content: `**Tiket berhasil dibuat!**\nChannel: <#${ticketChannel.id}>\nID: #${ticketNumber}`,
+            content: `✅ **Tiket berhasil dibuat!**\nChannel: <#${ticketChannel.id}>\nID: #${ticketNumber}`,
             ephemeral: true
         });
         
     } catch (error) {
         console.error('Error creating ticket:', error);
         await interaction.editReply({
-            content: 'Gagal membuat tiket. Silakan coba lagi!',
+            content: '❌ Gagal membuat tiket. Silakan coba lagi!',
             ephemeral: true
         });
     }
@@ -1925,14 +1463,14 @@ async function handleCreateTicketModal(interaction) {
 async function handleCloseTicketButton(interaction) {
     if (!isAdmin(interaction.member)) {
         return interaction.reply({
-            content: 'Hanya admin yang dapat menutup tiket!',
+            content: '❌ Hanya admin yang dapat menutup tiket!',
             ephemeral: true
         });
     }
     
     if (isRateLimited(interaction.user.id, 'closeTicket')) {
         return interaction.reply({
-            content: 'Harap tunggu 10 detik sebelum menutup tiket lain!',
+            content: '⏳ Harap tunggu 10 detik sebelum menutup tiket lain!',
             ephemeral: true
         });
     }
@@ -1967,7 +1505,7 @@ async function handleCloseReasonModal(interaction) {
         
         if (!ticket) {
             return interaction.editReply({
-                content: 'Channel ini bukan channel tiket yang valid!',
+                content: '❌ Channel ini bukan channel tiket yang valid!',
                 ephemeral: true
             });
         }
@@ -2004,14 +1542,14 @@ async function handleCloseReasonModal(interaction) {
         });
         
         await interaction.editReply({
-            content: 'Konfirmasi penutupan dikirim!',
+            content: '✅ Konfirmasi penutupan dikirim!',
             ephemeral: true
         });
         
     } catch (error) {
         console.error('Error in close reason modal:', error);
         await interaction.editReply({
-            content: 'Gagal memproses permintaan penutupan!',
+            content: '❌ Gagal memproses permintaan penutupan!',
             ephemeral: true
         });
     }
@@ -2020,7 +1558,7 @@ async function handleCloseReasonModal(interaction) {
 async function handleConfirmClose(interaction) {
     if (!isAdmin(interaction.member)) {
         return interaction.reply({
-            content: 'Hanya admin yang dapat menutup tiket!',
+            content: '❌ Hanya admin yang dapat menutup tiket!',
             ephemeral: true
         });
     }
@@ -2036,7 +1574,7 @@ async function handleConfirmClose(interaction) {
         
         if (!ticketEntry) {
             return interaction.editReply({
-                content: 'Tiket tidak ditemukan!',
+                content: '❌ Tiket tidak ditemukan!',
                 ephemeral: true
             });
         }
@@ -2107,7 +1645,7 @@ async function handleConfirmClose(interaction) {
         }
         
         await interaction.editReply({
-            content: 'Tiket berhasil ditutup!',
+            content: '✅ Tiket berhasil ditutup!',
             ephemeral: true
         });
         
@@ -2124,7 +1662,7 @@ async function handleConfirmClose(interaction) {
     } catch (error) {
         console.error('Error confirming close:', error);
         await interaction.editReply({
-            content: 'Gagal menutup tiket!',
+            content: '❌ Gagal menutup tiket!',
             ephemeral: true
         });
     }
@@ -2133,7 +1671,7 @@ async function handleConfirmClose(interaction) {
 async function handleCancelClose(interaction) {
     if (!isAdmin(interaction.member)) {
         return interaction.reply({
-            content: 'Hanya admin yang dapat membatalkan penutupan!',
+            content: '❌ Hanya admin yang dapat membatalkan penutupan!',
             ephemeral: true
         });
     }
@@ -2141,7 +1679,7 @@ async function handleCancelClose(interaction) {
     try {
         await interaction.message.delete();
         await interaction.reply({
-            content: 'Penutupan tiket dibatalkan.',
+            content: '✅ Penutupan tiket dibatalkan.',
             ephemeral: true
         });
     } catch (error) {
@@ -2177,9 +1715,13 @@ async function sendCloseLog(ticket, closer, closeReason) {
     await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
 }
 
+// ============================================
+// TICKET COMMAND FUNCTIONS
+// ============================================
+
 async function setupTicketSystem(message) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return sendTempMessage(message.channel, 'Anda memerlukan izin Administrator untuk menggunakan perintah ini!', 5000);
+        return sendTempMessage(message.channel, '❌ Anda memerlukan izin Administrator untuk menggunakan perintah ini!', 5000);
     }
     
     try {
@@ -2212,59 +1754,24 @@ async function setupTicketSystem(message) {
         embeds: [embed],
         components: [buttonRow]
     });
-    
-    // Create log channel if doesn't exist
-    const logChannelName = '┊・✨﹕ticket﹒logs';
-    let logChannel = message.guild.channels.cache.find(c => 
-        c.name === logChannelName && c.type === ChannelType.GuildText
-    );
-    
-    if (!logChannel) {
-        try {
-            logChannel = await message.guild.channels.create({
-                name: logChannelName,
-                type: ChannelType.GuildText,
-                topic: 'Log tiket yang ditutup',
-                permissionOverwrites: [
-                    {
-                        id: message.guild.id,
-                        deny: [PermissionsBitField.Flags.SendMessages],
-                        allow: [PermissionsBitField.Flags.ViewChannel]
-                    }
-                ]
-            });
-            
-            const logEmbed = new EmbedBuilder()
-                .setColor(colors.success)
-                .setTitle('📋 Log Channel Tiket Dibuat')
-                .setDescription('Channel ini akan mencatat semua tiket yang ditutup')
-                .setThumbnail(embedImages.ticketLogs)
-                .setFooter({ text: 'Ticket Log System' })
-                .setTimestamp();
-            
-            await logChannel.send({ embeds: [logEmbed] });
-        } catch (error) {
-            console.error('Error creating log channel:', error);
-        }
-    }
 }
 
 async function createTicketCommand(message, args) {
     if (isRateLimited(message.author.id, 'createTicket')) {
-        return sendTempMessage(message.channel, 'Harap tunggu 30 detik sebelum membuat tiket baru!', 5000);
+        return sendTempMessage(message.channel, '⏳ Harap tunggu 30 detik sebelum membuat tiket baru!', 5000);
     }
     
     if (ticketCache.activeTickets.has(message.author.id)) {
         const ticket = ticketCache.activeTickets.get(message.author.id);
-        return sendTempMessage(message.channel, `Anda sudah memiliki tiket aktif: <#${ticket.channelId}>`, 10000);
+        return sendTempMessage(message.channel, `❌ Anda sudah memiliki tiket aktif: <#${ticket.channelId}>`, 10000);
     }
     
     const reason = args.join(' ');
     if (!reason || reason.length < 3) {
-        return sendTempMessage(message.channel, 'Harap berikan alasan yang jelas (minimal 3 karakter)!', 10000);
+        return sendTempMessage(message.channel, '❌ Harap berikan alasan yang jelas (minimal 3 karakter)!', 10000);
     }
     
-    const creatingMsg = await message.channel.send('**Membuat tiket...**');
+    const creatingMsg = await message.channel.send('⏳ **Membuat tiket...**');
     
     try {
         const guild = message.guild;
@@ -2358,17 +1865,17 @@ async function createTicketCommand(message, args) {
             components: [buttonRow]
         });
         
-        await creatingMsg.edit(`**Tiket berhasil dibuat!**\nChannel: <#${ticketChannel.id}>\nID: #${ticketNumber}`);
+        await creatingMsg.edit(`✅ **Tiket berhasil dibuat!**\nChannel: <#${ticketChannel.id}>\nID: #${ticketNumber}`);
         
     } catch (error) {
         console.error('Error creating ticket from command:', error);
-        await creatingMsg.edit('Gagal membuat tiket!');
+        await creatingMsg.edit('❌ Gagal membuat tiket!');
     }
 }
 
 async function closeTicketCommand(message, args) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat menutup tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat menutup tiket!', 5000);
     }
     
     const ticket = Array.from(ticketCache.activeTickets.values()).find(t => 
@@ -2376,12 +1883,12 @@ async function closeTicketCommand(message, args) {
     );
     
     if (!ticket) {
-        return sendTempMessage(message.channel, 'Ini bukan channel tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Ini bukan channel tiket!', 5000);
     }
     
     const closeReason = args.join(' ') || 'Tidak ada alasan diberikan';
     
-    await sendTempMessage(message.channel, `**Menutup tiket #${ticket.ticketNumber}...**`, 3000);
+    await sendTempMessage(message.channel, `⏳ **Menutup tiket #${ticket.ticketNumber}...**`, 3000);
     
     const ticketEntry = Array.from(ticketCache.activeTickets.entries()).find(([_, t]) => 
         t.channelId === message.channel.id
@@ -2428,12 +1935,12 @@ async function closeTicketCommand(message, args) {
 
 async function addUserToTicket(message, args) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat menambahkan user ke tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat menambahkan user ke tiket!', 5000);
     }
     
     const userToAdd = message.mentions.users.first();
     if (!userToAdd) {
-        return sendTempMessage(message.channel, 'Tag user yang ingin ditambahkan!', 5000);
+        return sendTempMessage(message.channel, '❌ Tag user yang ingin ditambahkan!', 5000);
     }
     
     try {
@@ -2443,56 +1950,56 @@ async function addUserToTicket(message, args) {
             ReadMessageHistory: true,
         });
         
-        await message.channel.send(`<@${userToAdd.id}> telah ditambahkan ke tiket!`);
+        await message.channel.send(`✅ <@${userToAdd.id}> telah ditambahkan ke tiket!`);
     } catch (error) {
         console.error('Error adding user:', error);
-        await message.channel.send('Gagal menambahkan user!');
+        await message.channel.send('❌ Gagal menambahkan user!');
     }
 }
 
 async function removeUserFromTicket(message, args) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat menghapus user dari tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat menghapus user dari tiket!', 5000);
     }
     
     const userToRemove = message.mentions.users.first();
     if (!userToRemove) {
-        return sendTempMessage(message.channel, 'Tag user yang ingin dihapus!', 5000);
+        return sendTempMessage(message.channel, '❌ Tag user yang ingin dihapus!', 5000);
     }
     
     try {
         await message.channel.permissionOverwrites.delete(userToRemove.id);
-        await message.channel.send(`<@${userToRemove.id}> telah dihapus dari tiket!`);
+        await message.channel.send(`✅ <@${userToRemove.id}> telah dihapus dari tiket!`);
     } catch (error) {
         console.error('Error removing user:', error);
-        await message.channel.send('Gagal menghapus user!');
+        await message.channel.send('❌ Gagal menghapus user!');
     }
 }
 
 async function renameTicket(message, args) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat mengganti nama tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat mengganti nama tiket!', 5000);
     }
     
     const newName = args.join(' ');
     if (!newName || newName.length < 3) {
-        return sendTempMessage(message.channel, 'Masukkan nama baru untuk tiket (minimal 3 karakter)!', 5000);
+        return sendTempMessage(message.channel, '❌ Masukkan nama baru untuk tiket (minimal 3 karakter)!', 5000);
     }
     
     try {
         const oldName = message.channel.name;
         const cleanName = newName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 100);
         await message.channel.setName(cleanName);
-        await message.channel.send(`Nama tiket diubah dari \`${oldName}\` menjadi \`${cleanName}\``);
+        await message.channel.send(`✅ Nama tiket diubah dari \`${oldName}\` menjadi \`${cleanName}\``);
     } catch (error) {
         console.error('Error renaming ticket:', error);
-        await message.channel.send('Gagal mengganti nama tiket!');
+        await message.channel.send('❌ Gagal mengganti nama tiket!');
     }
 }
 
 async function showTicketLogs(message) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat melihat log tiket!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat melihat log tiket!', 5000);
     }
     
     const logChannel = message.guild.channels.cache.find(c => 
@@ -2500,7 +2007,7 @@ async function showTicketLogs(message) {
     );
     
     if (!logChannel) {
-        return message.channel.send('Log channel tidak ditemukan!');
+        return message.channel.send('❌ Log channel tidak ditemukan!');
     }
     
     try {
@@ -2508,7 +2015,7 @@ async function showTicketLogs(message) {
         const logEmbeds = messages.filter(msg => msg.embeds.length > 0).map(msg => msg.embeds[0]);
         
         if (logEmbeds.length === 0) {
-            return message.channel.send('Belum ada log tiket yang ditutup.');
+            return message.channel.send('ℹ️ Belum ada log tiket yang ditutup.');
         }
         
         const logEmbed = new EmbedBuilder()
@@ -2523,13 +2030,13 @@ async function showTicketLogs(message) {
         
     } catch (error) {
         console.error('Error showing logs:', error);
-        await message.channel.send('Gagal mengambil log tiket!');
+        await message.channel.send('❌ Gagal mengambil log tiket!');
     }
 }
 
 async function cleanupTickets(message) {
     if (!isAdmin(message.member)) {
-        return sendTempMessage(message.channel, 'Hanya admin yang dapat menggunakan perintah ini!', 5000);
+        return sendTempMessage(message.channel, '❌ Hanya admin yang dapat menggunakan perintah ini!', 5000);
     }
     
     let cleaned = 0;
@@ -2541,13 +2048,13 @@ async function cleanupTickets(message) {
         try {
             await channel.delete('Cleanup - old closed ticket');
             cleaned++;
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Delay untuk mencegah rate limit
         } catch (error) {
             console.error(`Error cleaning channel ${channel.name}:`, error);
         }
     }
     
-    await message.channel.send(`Cleanup selesai. ${cleaned} channel dihapus.`);
+    await message.channel.send(`✅ Cleanup selesai. ${cleaned} channel dihapus.`);
 }
 
 async function showHelp(message) {
@@ -2597,368 +2104,6 @@ async function showHelp(message) {
 }
 
 // ============================================
-// ECONOMY SYSTEM FUNCTIONS
-// ============================================
-
-async function checkBalance(message, member) {
-    const userData = getEconomyUserData(member.id);
-    
-    const embed = new EmbedBuilder()
-        .setColor('#FFD700')
-        .setTitle(`💰 **SALDO ${member.user.username}**`)
-        .setThumbnail(member.user.displayAvatarURL())
-        .addFields(
-            { name: '💵 Dompet', value: `**${userData.balance}** koin`, inline: true },
-            { name: '🏦 Bank', value: `**${userData.bank}** koin`, inline: true },
-            { name: '📊 Total', value: `**${userData.balance + userData.bank}** koin`, inline: true },
-            { name: '🎮 Level', value: `**${userData.level}**`, inline: true },
-            { name: '⭐ XP', value: `**${userData.xp}**/${userData.level * 100}`, inline: true },
-            { name: '🔥 Daily Streak', value: `**${userData.daily_streak}** hari`, inline: true }
-        );
-    
-    await message.reply({ embeds: [embed] });
-}
-
-async function dailyReward(message) {
-    const userId = message.author.id;
-    const userData = getEconomyUserData(userId);
-    const currentTime = new Date();
-    
-    // Check if already claimed today
-    if (userData.last_daily) {
-        const lastDaily = new Date(userData.last_daily);
-        const timeDiff = currentTime - lastDaily;
-        const hoursDiff = timeDiff / (1000 * 60 * 60);
-        
-        if (hoursDiff < 24) {
-            const hoursLeft = Math.floor(24 - hoursDiff);
-            const minutesLeft = Math.floor((24 - hoursDiff - hoursLeft) * 60);
-            
-            const embed = new EmbedBuilder()
-                .setColor('#ED4245')
-                .setTitle('⏰ **DAILY REWARD**')
-                .setDescription(`Anda sudah klaim daily hari ini!\nTunggu **${hoursLeft} jam ${minutesLeft} menit** lagi.`);
-            
-            await message.reply({ embeds: [embed] });
-            return;
-        }
-    }
-    
-    // Calculate reward
-    const streak = userData.daily_streak;
-    const baseReward = 100;
-    const streakBonus = Math.min(streak * 10, 200);
-    const totalReward = baseReward + streakBonus;
-    
-    // Update streak
-    if (userData.last_daily) {
-        const lastDaily = new Date(userData.last_daily);
-        const daysDiff = Math.floor((currentTime - lastDaily) / (1000 * 60 * 60 * 24));
-        if (daysDiff === 1) {
-            userData.daily_streak += 1;
-        } else if (daysDiff > 1) {
-            userData.daily_streak = 1;
-        }
-    } else {
-        userData.daily_streak = 1;
-    }
-    
-    userData.last_daily = currentTime.toISOString();
-    addMoney(userId, totalReward, "Daily Reward");
-    
-    const embed = new EmbedBuilder()
-        .setColor('#57F287')
-        .setTitle('🎁 **DAILY REWARD BERHASIL!**')
-        .setDescription(`Selamat ${message.author.toString()}! Anda mendapatkan reward harian!`)
-        .addFields(
-            { name: '💵 Reward Dasar', value: `**${baseReward}** koin`, inline: true },
-            { name: '🔥 Streak Bonus', value: `**${streakBonus}** koin`, inline: true },
-            { name: '💰 Total', value: `**${totalReward}** koin`, inline: true },
-            { name: '📅 Streak Saat Ini', value: `**${userData.daily_streak}** hari berturut-turut`, inline: false }
-        );
-    
-    // Special bonus for 7-day streak
-    if (userData.daily_streak % 7 === 0) {
-        const specialBonus = 500;
-        addMoney(userId, specialBonus, "7-Day Streak Bonus");
-        embed.addField('🎊 **BONUS 7 HARI!**', `Bonus tambahan **${specialBonus}** koin!`, false);
-    }
-    
-    await message.reply({ embeds: [embed] });
-}
-
-async function workCommand(message) {
-    const userId = message.author.id;
-    
-    // Get random job and salary
-    const jobs = [
-        { name: '👨‍🍳 Koki Restoran', min: 50, max: 150 },
-        { name: '👨‍💻 Programmer', min: 100, max: 300 },
-        { name: '👷 Pekerja Konstruksi', min: 30, max: 100 },
-        { name: '🎨 Desainer Grafis', min: 80, max: 250 },
-        { name: '🚕 Driver Ojek Online', min: 40, max: 120 },
-        { name: '👨‍🏫 Guru Les', min: 60, max: 180 }
-    ];
-    
-    const job = jobs[Math.floor(Math.random() * jobs.length)];
-    const earnings = Math.floor(Math.random() * (job.max - job.min + 1)) + job.min;
-    
-    // Give money
-    const newBalance = addMoney(userId, earnings, `Work: ${job.name}`);
-    
-    const embed = new EmbedBuilder()
-        .setColor('#3498DB')
-        .setTitle('💼 **BEKERJA**')
-        .setDescription(`${message.author.toString()} bekerja sebagai **${job.name}**!`)
-        .addFields(
-            { name: '💰 Gaji', value: `**${earnings}** koin`, inline: true },
-            { name: '💵 Saldo Baru', value: `**${newBalance}** koin`, inline: true }
-        );
-    
-    await message.reply({ embeds: [embed] });
-}
-
-async function crimeCommand(message) {
-    const userId = message.author.id;
-    
-    // Crime outcomes
-    const outcomes = [
-        { name: '🔫 Perampokan Bank', success_rate: 0.3, success_pay: 1000, fail_loss: 500 },
-        { name: '👜 Copet', success_rate: 0.6, success_pay: 200, fail_loss: 100 },
-        { name: '💎 Pencurian Permata', success_rate: 0.4, success_pay: 800, fail_loss: 400 },
-        { name: '🖥️ Hacking', success_rate: 0.5, success_pay: 400, fail_loss: 200 },
-        { name: '🚗 Pencurian Mobil', success_rate: 0.35, success_pay: 700, fail_loss: 350 }
-    ];
-    
-    const crime = outcomes[Math.floor(Math.random() * outcomes.length)];
-    const success = Math.random() < crime.success_rate;
-    
-    if (success) {
-        const newBalance = addMoney(userId, crime.success_pay, `Crime Success: ${crime.name}`);
-        
-        const embed = new EmbedBuilder()
-            .setColor('#57F287')
-            .setTitle('✅ **KEJAHATAN BERHASIL!**')
-            .setDescription(`${message.author.toString()} berhasil **${crime.name}**!`)
-            .addFields(
-                { name: '💰 Hasil', value: `**+${crime.success_pay}** koin`, inline: true },
-                { name: '💵 Saldo Baru', value: `**${newBalance}** koin`, inline: true }
-            );
-        
-        await message.reply({ embeds: [embed] });
-    } else {
-        const userData = getEconomyUserData(userId);
-        const loss = Math.min(crime.fail_loss, userData.balance);
-        
-        if (loss > 0) {
-            removeMoney(userId, loss, `Crime Failed: ${crime.name}`);
-        }
-        
-        const userDataUpdated = getEconomyUserData(userId);
-        
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle('❌ **KEJAHATAN GAGAL!**')
-            .setDescription(`${message.author.toString()} gagal **${crime.name}** dan ditangkap!`)
-            .addFields(
-                { name: '💸 Denda', value: `**-${loss}** koin`, inline: true },
-                { name: '💵 Saldo Baru', value: `**${userDataUpdated.balance}** koin`, inline: true }
-            );
-        
-        await message.reply({ embeds: [embed] });
-    }
-}
-
-async function transferMoneyCommand(message, target, amount) {
-    if (amount <= 0) {
-        await message.reply('❌ **Jumlah transfer harus lebih dari 0!**');
-        return;
-    }
-    
-    if (target.user.bot) {
-        await message.reply('❌ **Tidak bisa transfer ke bot!**');
-        return;
-    }
-    
-    if (target.id === message.author.id) {
-        await message.reply('❌ **Tidak bisa transfer ke diri sendiri!**');
-        return;
-    }
-    
-    const result = transferMoney(message.author.id, target.id, amount);
-    
-    if (result.success) {
-        const userData = getEconomyUserData(message.author.id);
-        const embed = new EmbedBuilder()
-            .setColor('#57F287')
-            .setTitle('✅ **TRANSFER BERHASIL!**')
-            .setDescription(`${message.author.toString()} mentransfer **${amount}** koin ke ${target.toString()}`)
-            .addFields(
-                { name: '💰 Jumlah', value: `**${amount}** koin`, inline: true },
-                { name: '💵 Saldo Anda', value: `**${userData.balance}** koin`, inline: true }
-            );
-        
-        await message.reply({ embeds: [embed] });
-    } else {
-        const embed = new EmbedBuilder()
-            .setColor('#ED4245')
-            .setTitle('❌ **TRANSFER GAGAL!**')
-            .setDescription(result.message);
-        
-        await message.reply({ embeds: [embed] });
-    }
-}
-
-async function richLeaderboard(message) {
-    // Get top 10 users
-    const users = [];
-    
-    for (const [userIdStr, data] of Object.entries(economyData)) {
-        try {
-            const user = await client.users.fetch(userIdStr);
-            const totalWealth = data.balance + data.bank;
-            users.push({ user, wealth: totalWealth, level: data.level });
-        } catch (error) {
-            continue;
-        }
-    }
-    
-    // Sort by wealth
-    users.sort((a, b) => b.wealth - a.wealth);
-    const top10 = users.slice(0, 10);
-    
-    const embed = new EmbedBuilder()
-        .setColor('#FFD700')
-        .setTitle('🏆 **LEADERBOARD KAYA RAYA**')
-        .setDescription('10 Orang Terkaya di Server');
-    
-    for (let i = 0; i < top10.length; i++) {
-        const { user, wealth, level } = top10[i];
-        const medal = i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}.`;
-        
-        embed.addFields({
-            name: `${medal} ${user.username}`,
-            value: `💵 **${wealth.toLocaleString()}** koin | 🎮 Level ${level}`,
-            inline: false
-        });
-    }
-    
-    // Add author's rank if not in top 10
-    const authorWealth = getEconomyUserData(message.author.id).balance + getEconomyUserData(message.author.id).bank;
-    const authorRank = users.findIndex(u => u.user.id === message.author.id) + 1;
-    
-    if (authorRank > 0) {
-        embed.setFooter({ text: `Peringkat Anda: #${authorRank} dengan ${authorWealth.toLocaleString()} koin` });
-    }
-    
-    await message.reply({ embeds: [embed] });
-}
-
-async function pricelistCommand(message) {
-    const pricelistPart1 = `
-📋 **PRICELIST DISCSHOP** 📋
-========================================
-
-**NITRO PROMOTION** 
-https://discord.com/channels/1452584833766129686/1452839168697696278/1453019423358062683
-
-**DECORATION DISCORD**
-https://discord.com/channels/1452584833766129686/1452611173600985181/1452623490094993459
-
-**THUMBNAIL & OVERLAY STREAMING**
-https://discord.com/channels/1452584833766129686/1452611090906091620/1453018905684475946
-
-**J0KI ORBS**
-https://discord.com/channels/1452584833766129686/1453053305184849960
-`;
-    
-    await message.reply(pricelistPart1);
-}
-
-async function showPayment(message, invoiceId) {
-    const embed = new EmbedBuilder()
-        .setColor('#57F287')
-        .setTitle('💳 **METODE PEMBAYARAN**')
-        .setDescription('Pilih metode pembayaran di bawah:');
-    
-    try {
-        await message.reply("**🏦 QR CODE ALLPAY:**");
-        await message.channel.send("https://image2url.com/r2/bucket3/images/1766903385567-ce0ecef3-a493-4bd4-8b5c-ca5c68f3acc5.png");
-        
-        const instructions = new EmbedBuilder()
-            .setColor('#FEE75C')
-            .setTitle('📋 **CARA PEMBAYARAN**')
-            .addFields({
-                name: 'LANGKAH-LANGKAH',
-                value: `
-                1️⃣ **Pilih metode** transfer di atas
-                2️⃣ **Scan QR** dengan aplikasi bank/e-wallet
-                3️⃣ **Transfer** sesuai jumlah
-                4️⃣ **Screenshot** bukti transfer
-                5️⃣ **Kirim** ke admin untuk konfirmasi
-                `,
-                inline: false
-            });
-        
-        if (invoiceId) {
-            instructions.addField('📄 **INVOICE ID**', `\`${invoiceId}\``, false);
-        }
-        
-        await message.channel.send({ embeds: [instructions] });
-        
-    } catch (error) {
-        await message.reply(`❌ Gagal menampilkan QR Code: ${error.message}`);
-    }
-}
-
-async function sendPaymentImage(message) {
-    await message.reply("**💳 GAMBAR PEMBAYARAN:**");
-    await message.channel.send("https://image2url.com/r2/bucket3/images/1766903385567-ce0ecef3-a493-4bd4-8b5c-ca5c68f3acc5.png");
-    await message.reply("**📋 INSTRUKSI:** Transfer sesuai nominal, lalu kirim bukti ke admin!");
-}
-
-async function doneCommand(message) {
-    await message.reply("**https://discord.com/channels/1452584833766129686/1452593189595648112\n\nmohon untuk share testi di sini ya mas, bebas record/ss**");
-}
-
-async function botHelp(message) {
-    const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle('𖥔˚ BANTUAN BOT SHOP & GAMES')
-        .setDescription('Prefix: `.` untuk ekonomi, `!` untuk shop & ticket')
-        .addFields(
-            {
-                name: '𖥔˚ **SHOP CATALOG (Admin only)**',
-                value: '`!catalog` - Catalog streaming utama\n`!catalogdc` - Catalog Discord Nitro\n`!catalogsv` - Catalog Server & Bot\n`!catalogdeco` - Catalog Decoration\n`!cataloggame` - Catalog Game Steam',
-                inline: false
-            },
-            {
-                name: '𖥔˚ **TICKET SYSTEM**',
-                value: '`!setup` - Setup panel tiket (admin)\n`!ticket [alasan]` - Buat tiket baru\n`!close [alasan]` - Tutup tiket (admin)\n`!help` - Bantuan ticket',
-                inline: false
-            },
-            {
-                name: '𖥔˚ **EKONOMI SYSTEM**',
-                value: '`.balance` - Cek saldo\n`.daily` - Klaim reward harian\n`.work` - Bekerja dapat uang\n`.crime` - Kejahatan (berisiko)\n`.transfer @user jumlah` - Transfer uang\n`.rich` - Leaderboard terkaya',
-                inline: false
-            },
-            {
-                name: '𖥔˚ **PRICELIST & PEMBAYARAN**',
-                value: '`.pricelist` - Lihat pricelist\n`.payment` - QR Code pembayaran\n`.payimage` - Gambar QR Code\n`.done` - Link testimoni',
-                inline: false
-            },
-            {
-                name: '𖥔˚ **UTILITAS**',
-                value: '`.ping` - Cek koneksi bot\n`.help` - Tampilkan bantuan ini',
-                inline: false
-            }
-        )
-        .setFooter({ text: '✅ Sistem dioptimasi untuk menghindari rate limit Discord' });
-    
-    await message.reply({ embeds: [embed] });
-}
-
-// ============================================
 // ERROR HANDLING & STARTUP
 // ============================================
 
@@ -2968,6 +2113,27 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('Shutting down gracefully...');
+    
+    // Clear rate limit intervals
+    if (rateLimiter.cleanupInterval) {
+        clearInterval(rateLimiter.cleanupInterval);
+    }
+    
+    // Destroy client
+    if (client.destroy) {
+        client.destroy();
+    }
+    
+    // Close server
+    server.close(() => {
+        console.log('✅ Shutdown complete');
+        process.exit(0);
+    });
 });
 
 // Get token from environment variable
@@ -2981,26 +2147,11 @@ if (!token) {
     console.log('2. Atau buat file .env dengan DISCORD_TOKEN=token_anda');
     console.log('='.repeat(50));
     
-    // Tetap jalankan Express server meski tanpa Discord bot
     console.log('⚠️  Discord bot tidak akan berjalan, tapi Express server tetap aktif');
 } else {
-    // Login ke Discord
+    // Login ke Discord dengan error handling
     client.login(token).catch(error => {
         console.error('Gagal login ke Discord:', error);
         console.log('⚠️  Discord bot gagal connect, tapi Express server tetap aktif');
     });
 }
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('Shutting down gracefully...');
-    
-    // Save economy data before shutdown
-    saveEconomyData();
-    console.log('💰 Economy data saved');
-    
-    server.close(() => {
-        console.log('Express server closed');
-        process.exit(0);
-    });
-});
