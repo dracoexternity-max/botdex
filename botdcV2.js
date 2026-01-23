@@ -821,6 +821,109 @@ function createGameCatalogEmbed() {
 }
 
 // ============================================
+// SHOP UTILITY FUNCTIONS
+// ============================================
+
+async function pricelistCommand(message) {
+    const pricelistPart1 = `
+📋 **PRICELIST DISCSHOP** 📋
+========================================
+
+**NITRO PROMOTION** 
+https://discord.com/channels/1452584833766129686/1452839168697696278/1453019423358062683
+
+**DECORATION DISCORD**
+https://discord.com/channels/1452584833766129686/1452611173600985181/1452623490094993459
+
+**THUMBNAIL & OVERLAY STREAMING**
+https://discord.com/channels/1452584833766129686/1452611090906091620/1453018905684475946
+
+**J0KI ORBS**
+https://discord.com/channels/1452584833766129686/1453053305184849960
+`;
+    
+    await message.reply(pricelistPart1);
+}
+
+async function showPayment(message, invoiceId) {
+    const embed = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle('💳 **METODE PEMBAYARAN**')
+        .setDescription('Pilih metode pembayaran di bawah:');
+    
+    try {
+        await message.reply("**🏦 QR CODE ALLPAY:**");
+        await message.channel.send("https://image2url.com/r2/bucket3/images/1766903385567-ce0ecef3-a493-4bd4-8b5c-ca5c68f3acc5.png");
+        
+        const instructions = new EmbedBuilder()
+            .setColor('#FEE75C')
+            .setTitle('📋 **CARA PEMBAYARAN**')
+            .addFields({
+                name: 'LANGKAH-LANGKAH',
+                value: `
+                1️⃣ **Pilih metode** transfer di atas
+                2️⃣ **Scan QR** dengan aplikasi bank/e-wallet
+                3️⃣ **Transfer** sesuai jumlah
+                4️⃣ **Screenshot** bukti transfer
+                5️⃣ **Kirim** ke admin untuk konfirmasi
+                `,
+                inline: false
+            });
+        
+        if (invoiceId) {
+            instructions.addField('📄 **INVOICE ID**', `\`${invoiceId}\``, false);
+        }
+        
+        await message.channel.send({ embeds: [instructions] });
+        
+    } catch (error) {
+        await message.reply(`❌ Gagal menampilkan QR Code: ${error.message}`);
+    }
+}
+
+async function sendPaymentImage(message) {
+    await message.reply("**💳 GAMBAR PEMBAYARAN:**");
+    await message.channel.send("https://image2url.com/r2/bucket3/images/1766903385567-ce0ecef3-a493-4bd4-8b5c-ca5c68f3acc5.png");
+    await message.reply("**📋 INSTRUKSI:** Transfer sesuai nominal, lalu kirim bukti ke admin!");
+}
+
+async function doneCommand(message) {
+    await message.reply("**https://discord.com/channels/1452584833766129686/1452593189595648112\n\nmohon untuk share testi di sini ya mas, bebas record/ss**");
+}
+
+async function botHelp(message) {
+    const embed = new EmbedBuilder()
+        .setColor('#5865F2')
+        .setTitle('𖥔˚ BANTUAN BOT SHOP & TICKET')
+        .setDescription('Prefix: `!` untuk shop & ticket, `.` untuk utility')
+        .addFields(
+            {
+                name: '𖥔˚ **SHOP CATALOG (Admin only)**',
+                value: '`!catalog` - Catalog streaming utama\n`!catalogdc` - Catalog Discord Nitro\n`!catalogsv` - Catalog Server & Bot\n`!catalogdeco` - Catalog Decoration\n`!cataloggame` - Catalog Game Steam',
+                inline: false
+            },
+            {
+                name: '𖥔˚ **TICKET SYSTEM**',
+                value: '`!setup` - Setup panel tiket (admin)\n`!ticket [alasan]` - Buat tiket baru\n`!close [alasan]` - Tutup tiket (admin)\n`!help` - Bantuan ticket',
+                inline: false
+            },
+            {
+                name: '𖥔˚ **SHOP UTILITY**',
+                value: '`.pricelist` - Lihat pricelist lengkap\n`.payment` - QR Code pembayaran\n`.payimage` - Gambar QR Code\n`.done` - Link testimoni',
+                inline: false
+            },
+            {
+                name: '𖥔˚ **UTILITAS**',
+                value: '`.ping` - Cek koneksi bot\n`.help` - Tampilkan bantuan ini',
+                inline: false
+            }
+        )
+        .setFooter({ text: '✅ Sistem dioptimasi untuk menghindari rate limit Discord' });
+    
+    await message.reply({ embeds: [embed] });
+}
+
+// ============================================
 // DISCORD BOT EVENTS
 // ============================================
 
@@ -830,6 +933,7 @@ client.once('ready', () => {
   console.log(`🏠 Servers: ${client.guilds.cache.size}`);
   console.log(`📊 Sistem Shop: Ready! (Optimized)`);
   console.log(`🎫 Sistem Ticket: Ready! (Optimized)`);
+  console.log(`💳 Sistem Payment: Ready!`);
   console.log(`⚡ Rate Limiting: Active`);
   console.log('='.repeat(50));
   
@@ -988,6 +1092,58 @@ client.on('messageCreate', async (message) => {
         } catch (error) {
             console.error(`Error executing command ${command}:`, error);
             await sendTempMessage(message.channel, '❌ Error executing command!', 5000);
+        }
+    }
+    
+    // ============================================
+    // SHOP UTILITY COMMANDS (dengan prefix ".")
+    // ============================================
+    
+    if (message.content.startsWith('.')) {
+        const args = message.content.slice(1).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+        
+        // Rate limiting untuk command shop utility
+        const commandLimit = rateLimiter.checkCommand(message.author.id, `shop_${command}`);
+        if (commandLimit.limited && command !== 'help' && command !== 'ping') {
+            return sendTempMessage(message.channel, `⏳ Mohon tunggu ${commandLimit.waitTime} detik sebelum menggunakan command ini lagi.`, 3000);
+        }
+        
+        try {
+            switch (command) {
+                case 'pricelist':
+                    await pricelistCommand(message);
+                    break;
+                    
+                case 'payment':
+                    const invoiceId = args[0];
+                    await showPayment(message, invoiceId);
+                    break;
+                    
+                case 'payimage':
+                    await sendPaymentImage(message);
+                    break;
+                    
+                case 'done':
+                    await doneCommand(message);
+                    break;
+                    
+                case 'help':
+                    await botHelp(message);
+                    break;
+                    
+                case 'ping':
+                    const latency = Math.round(client.ws.ping);
+                    await message.reply(`🏓 Pong! ${latency}ms`);
+                    break;
+                    
+                default:
+                    // Command tidak dikenali
+                    break;
+            }
+        } catch (error) {
+            console.error(`Error executing shop command ${command}:`, error);
+            await message.reply('❌ Terjadi error. Silakan coba lagi.').catch(() => {});
         }
     }
 });
