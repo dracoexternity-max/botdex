@@ -322,7 +322,7 @@ const decorationProducts = {
     decoration_nitro: {
         name: 'Decoration with Nitro',
         price: '22.000 - 65.000',
-        details: '• IDR 33.000 ⪼ IDR 22.000\n• IDR 39.500 ⪼ IDR 25.000\n• IDR 52.000 ⪼ IDR 35.000\n• IDR 65.000 ⪼ IDR 42.000\n• IDR 71.000 ⪼ IDR 45.000\n• IDR 78.000 ⪼ IDR 52.000\n• IDR 91.000 ⪼ IDR 65.000'
+        details: '• IDR 33.000 ⪼ IDR 22.000\n• IDR 39.500 ⪼ IDR 29.000\n• IDR 52.000 ⪼ IDR 35.000\n• IDR 65.000 ⪼ IDR 42.000\n• IDR 71.000 ⪼ IDR 45.000\n• IDR 78.000 ⪼ IDR 52.000\n• IDR 91.000 ⪼ IDR 65.000'
     },
     decoration_standard: {
         name: 'Decoration Non Nitro',
@@ -561,7 +561,7 @@ function createDiscordDropdown() {
             },
             {
                 label: 'Nitro Promo 3M - Via Log',
-                description: `Rp 40.000`,
+                description: `Rp 45.000`,
                 value: 'nitro_promo_via_log'
             },
             {
